@@ -2,66 +2,60 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Open in Perfetto</title>
+  <title>Perfetto Trace Launcher</title>
 </head>
 <body>
-  <p id="status">Ready</p>
-  <button id="open">Open trace in Perfetto</button>
+  <p id="status">Launching Perfetto…</p>
   <script>
-    // 1. Grab the trace URL from the query string
-    const params = new URLSearchParams(window.location.search);
-    const TRACE_URL = params.get('traceUrl');
-    const statusEl = document.getElementById('status');
+    (async function() {
+      const status = document.getElementById('status');
+      const params = new URLSearchParams(location.search);
+      const TRACE_URL = params.get('export');  // Drive’s download URL
+      const FILE_NAME = params.get('name') || 'trace.json';
 
-    if (!TRACE_URL) {
-      statusEl.textContent = 'Error: no traceUrl provided';
-      document.getElementById('open').disabled = true;
-    }
+      if (!TRACE_URL) {
+        status.textContent = 'Error: missing export URL';
+        return;
+      }
+      status.textContent = 'Fetching trace…';
 
-    document.getElementById('open').addEventListener('click', async () => {
-      statusEl.textContent = 'Fetching trace…';
-
-      // 2. Fetch the JSON/ArrayBuffer
       try {
-        const resp = await fetch(TRACE_URL);
-        if (!resp.ok) throw new Error(resp.status + ' ' + resp.statusText);
-        const buf = await resp.arrayBuffer();
+        // Include credentials so Drive’s auth cookie is sent
+        const resp = await fetch(TRACE_URL, { credentials: 'include' });
+        if (!resp.ok) throw new Error(resp.statusText);
+        const buffer = await resp.arrayBuffer();
 
-        statusEl.textContent = 'Opening Perfetto…';
-
-        // 3. Open Perfetto UI
+        status.textContent = 'Opening Perfetto UI…';
         const w = window.open('https://ui.perfetto.dev');
         if (!w) {
-          alert('Popup blocked – please allow popups.');
+          status.textContent = 'Popup blocked – allow popups.';
           return;
         }
 
-        // 4. PING/PONG handshake
+        // PING/PONG handshake
         const ping = () => w.postMessage('PING', '*');
         let pongHandler = e => {
           if (e.source === w && e.data === 'PONG') {
             window.removeEventListener('message', pongHandler);
             clearInterval(interval);
-            statusEl.textContent = 'Sending trace…';
-
-            // 5. postMessage the trace
+            status.textContent = 'Sending trace…';
             w.postMessage({
               perfetto: {
-                buffer: buf,
-                title: TRACE_URL.split('/').pop(),
-                fileName: '',
+                buffer,
+                title: FILE_NAME,
+                fileName: FILE_NAME
               }
             }, '*');
-            statusEl.textContent = 'Done!';
+            status.textContent = 'Done!';
           }
         };
         window.addEventListener('message', pongHandler);
         const interval = setInterval(ping, 100);
 
       } catch (err) {
-        statusEl.textContent = 'Error fetching trace: ' + err.message;
+        status.textContent = 'Error fetching trace: ' + err.message;
       }
-    });
+    })();
   </script>
 </body>
 </html>
