@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Open in Perfetto</title>
+</head>
+<body>
+  <button id="open">Open trace in Perfetto</button>
+  <script>
+    document.getElementById('open').addEventListener('click', async () => {
+      const TRACE_URL =
+        'https://drive.google.com/uc?export=download&id=YOUR_FILE_ID';
+      const resp = await fetch(TRACE_URL);
+      if (!resp.ok) {
+        alert('Fetch failed: ' + resp.status);
+        return;
+      }
+      const buf = await resp.arrayBuffer();
+
+      const w = window.open('https://ui.perfetto.dev');
+      if (!w) {
+        alert('Popup blocked');
+        return;
+      }
+
+      const ping = () => w.postMessage('PING', '*');
+      let pongHandler = e => {
+        if (e.source === w && e.data === 'PONG') {
+          window.removeEventListener('message', pongHandler);
+          clearInterval(interval);
+          w.postMessage({
+            perfetto: {
+              buffer: buf,
+              title: 'Drive Trace',
+              fileName: 'trace.json',
+            }
+          }, '*');
+        }
+      };
+      window.addEventListener('message', pongHandler);
+      const interval = setInterval(ping, 100);
+    });
+  </script>
+</body>
+</html>
+
